@@ -4,14 +4,24 @@
   "description": "This a Appplication built fromt he udemy course",
   "main": "index.js",
   "scripts": {
-    "watch": "nodemon app",
+    "watch": "nodemon -r esm db",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Krishna",
   "license": "ISC",
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "connect-flash": "^0.1.1",
+    "connect-mongo": "^3.2.0",
+    "dotenv": "^8.2.0",
     "ejs": "^3.1.2",
+    "esm": "^3.2.25",
     "express": "^4.17.1",
-    "nodemon": "^2.0.3"
+    "express-session": "^1.17.1",
+    "express-sessions": "^1.0.6",
+    "md5": "^2.2.1",
+    "mongodb": "^3.5.7",
+    "nodemon": "^2.0.3",
+    "validator": "^13.0.0"
   }
 }
