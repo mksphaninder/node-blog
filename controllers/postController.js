@@ -18,7 +18,7 @@ class postController {
             let post = await Post.findSinglePostById(req.params.id);
             res.render('single-post-screen', {post: post});
         } catch {
-            res.send("404 template should be shown!")
+            res.render('404');
         }
     }
 }

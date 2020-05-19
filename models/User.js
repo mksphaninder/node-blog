@@ -5,10 +5,17 @@ import md5 from 'md5';
 const userCollection = require('../db').db().collection('users'); // getting the db object for the collection users
 
 class User {
-    constructor(data) {
+    constructor(data, getAvatar) {
         this.data = data;
         this.errors = [];
-        this.avatar = '';
+        // this.avatar = '';
+
+        if(getAvatar == undefined) {
+            getAvatar = false;
+        }
+        if(getAvatar) {
+            this.getAvatar();
+        }
     }
     // Sanitizing the Data from the user.
     cleanup() {
