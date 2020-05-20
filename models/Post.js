@@ -1,11 +1,13 @@
 const postsCollection = require('../db').db().collection("posts");
 const objectId = require('mongodb').ObjectID;
+import sanitizeHTML from 'sanitize-html';
 import User from './User';
 class Post {
-    constructor(data, userid) {
+    constructor(data, userid, requestedPostId) {
         this.data = data;
         this.userid = userid;
-        this.errors = []
+        this.errors = [];
+        this.requestedPostId = requestedPostId;
     }
     cleanup() {
         if (typeof (this.data.title) != 'string') {
@@ -16,8 +18,8 @@ class Post {
         }
         // get rid of bogus props
         this.data = {
-            title: this.data.title.trim(),
-            body: this.data.body.trim(),
+            title: sanitizeHTML(this.data.title.trim(), {allowedTags: [], allowedAttributes: {}}),
+            body: sanitizeHTML(this.data.body.trim(), {allowedTags: [], allowedAttributes: {}}),
             createdDate: new Date(),
             author: objectId(this.userid)
         }
@@ -39,8 +41,10 @@ class Post {
             if (this.errors.length > 0) {
                 reject()
             } else {
-                postsCollection.insertOne(this.data).then(() => {
-                    resolve();
+                postsCollection.insertOne(this.data).then((info) => {
+                    // Mongodb will return an object which has the property ops.
+                    // Since we are only creating one document we need only the first one in the array.
+                    resolve(info.ops[0]._id); 
                 }).catch(() => {
                     this.errors.push('please try again later : DB problem.')
                     reject(this.errors);
@@ -49,39 +53,114 @@ class Post {
             }
         })
     }
-    static findSinglePostById(id) {
-        console.log('bob')
-        return new Promise(async(resolve, reject)=> {
-            if(typeof(id) != 'string' || !objectId.isValid(id)) {
-                reject();
-                return;
-            }
-            let posts = await postsCollection.aggregate([
-                {$match: {_id: new objectId(id)}},
-                {$lookup: {from: "users", localField: "author", foreignField: "_id", as: "authorDocument"}},
-                {$project: {
+
+    static reusablePostQuery(uniqueOperations, visitorId) {
+        return new Promise(async (resolve, reject) => {
+            let aggOperation = uniqueOperations.concat([{ $lookup: { from: "users", localField: "author", foreignField: "_id", as: "authorDocument" } },
+            {
+                $project: {
                     title: 1,
                     body: 1,
                     createdDate: 1,
-                    author: {$arrayElemAt: ["$authorDocument", 0]}
-                }}
-            ]).toArray()
-
+                    authorId: "$author",
+                    author: { $arrayElemAt: ["$authorDocument", 0] }
+                }
+            }]);
+            let posts = await postsCollection.aggregate(aggOperation).toArray()
             // Clean Author property in each post object.
-            posts = posts.map((post)=> {
+            posts = posts.map((post) => {
+                post.isVisitorOwner = post.authorId.equals(visitorId);
                 post.author = {
                     username: post.author.username,
                     avatar: new User(post.author, true).avatar,
                 }
                 return post
             })
+            resolve(posts)
+        });
+    }
+
+    static findSinglePostById(id, visitorId) {
+        return new Promise(async (resolve, reject) => {
+            if (typeof (id) != 'string' || !objectId.isValid(id)) {
+                reject();
+                return;
+            }
+
+            let posts = await this.reusablePostQuery([
+                {
+                    $match: {
+                        _id: new objectId(id)
+                    }
+                }
+            ], visitorId)
+
             if (posts.length) {
-                console.log(posts[0]);
                 resolve(posts[0]);
             } else {
                 reject();
             }
         });
+    }
+
+    static findByAuthorId(authorId) {
+        return this.reusablePostQuery([
+            {$match : {author: authorId}},
+            {$sort : {createdDate: -1}}
+        ]);
+    }
+
+    actuallyUpdate() {
+        return new Promise(async(resolve, reject)=> {
+            this.cleanup();
+            this.validate();
+            if(!this.errors.length) {
+                await postsCollection.findOneAndUpdate({
+                    _id: new objectId(this.requestedPostId)
+                }, {$set : {
+                    title: this.data.title,
+                    body: this.data.body
+                }});
+                resolve("success");
+            } else {
+                resolve("failure");
+            }
+        })
+    }
+
+    update() {
+        return new Promise(async(resolve, reject)=> {
+            try {
+                let post = await Post.findSinglePostById(this.requestedPostId, this.userid);
+                if(post.isVisitorOwner) {
+                    // update the DB
+                    let status = await this.actuallyUpdate();
+                    resolve(status);
+                }else {
+                    reject();
+                    return;
+                }
+            } catch {
+                reject()
+            }
+        })
+    }
+
+    static delete(postIdToDelete, currentUserId) {
+        return new Promise(async(resolve, reject)=> {
+            try {
+                let post = await Post.findSinglePostById(postIdToDelete, currentUserId);
+                console.log(post.isVisitorOwner);
+                if(post.isVisitorOwner) {
+                    await postsCollection.deleteOne({_id: new objectId(postIdToDelete)});
+                    resolve();
+                } else {
+                    reject();
+                }
+            } catch {
+                reject();
+            }
+        })
     }
 }
 

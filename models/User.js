@@ -133,6 +133,29 @@ class User {
     getAvatar() {
         this.avatar = `http://gravatar.com/avatar/${md5(this.data.email)}?s=128`
     }
+
+    static findByUsername(username){
+        return new Promise((resolve, reject)=> {
+            if(typeof(username) != 'string') {
+                reject();
+                return;
+            }
+            userCollection.findOne({username: username})
+            .then((userDoc)=>{
+                if(userDoc) {
+                    userDoc = new User(userDoc, true)
+                    userDoc = {
+                        _id: userDoc.data._id,
+                        username: userDoc.data.username,
+                        avatar: userDoc.avatar
+                    }
+                    resolve(userDoc);
+                }
+            }).catch(()=>{
+                reject();
+            });
+        })
+    }
 }
 
 export default User;
